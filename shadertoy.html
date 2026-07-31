@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>VR Shadertoy Starter</title>
+
+  <!--
+    ================================================================
+    EDIT THIS SHADER.
+    It uses the same mainImage / iTime / iResolution shape as Shadertoy.
+    ================================================================
+  -->
+  <script id="shadertoy-code" type="x-shader/x-fragment">
+float plasma(vec2 position, float time) {
+    float value =
+        sin(position.x + time) +
+        sin(position.y + time) +
+        sin(position.x + position.y + time);
+
+    return (value + 3.0) / 6.0;
+}
+
+vec3 palette(float value) {
+    return 0.5 + 0.5 * cos(
+        6.28318 * (value + vec3(0.3, 0.0, 0.7))
+    );
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    vec2 uv = fragCoord / iResolution.xy;
+
+    // center the coords and fix aspect ratio
+    vec2 p = uv * 2.0 - 1.0;
+    p.x *= iResolution.x / iResolution.y;
+
+    // scale up coordinate space so the waves are visible
+    p *= 10.0;
+
+    float v = plasma(p, iTime);
+    vec3 col = palette(v);
+
+    fragColor = vec4(col, 1.0);
+}
+  </script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #050505;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #info {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      z-index: 10;
+      max-width: min(520px, calc(100vw - 32px));
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.58);
+      backdrop-filter: blur(8px);
+      font-size: 14px;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+
+    #info strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <div id="info">
+    <strong>VR Shadertoy Starter</strong>
+    Edit the shader at the top of this file, save, and refresh.
+    Use “Enter VR” in Quest Browser.
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { VRButton } from "three/addons/webxr/VRButton.js";
+
+    // Shadertoy's virtual output size. The effect remains a plain 2D image
+    // and does not depend on the desktop or headset camera.
+    const SHADER_WIDTH = 1280;
+    const SHADER_HEIGHT = 720;
+
+    const userShader = document
+      .getElementById("shadertoy-code")
+      .textContent
+      .trim();
+
+    const vertexShader = `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    // This wrapper supplies Shadertoy-style uniforms and converts the plane's
+    // 0..1 UV coordinates into Shadertoy-like fragment coordinates.
+    const fragmentShader = `
+      precision highp float;
+
+      uniform vec3 iResolution;
+      uniform float iTime;
+
+      varying vec2 vUv;
+
+      ${userShader}
+
+      void main() {
+        vec2 fragCoord = vUv * iResolution.xy;
+
+        vec4 color = vec4(0.0);
+        mainImage(color, fragCoord);
+
+        gl_FragColor = color;
+      }
+    `;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+
+    // The camera only determines where the rectangular shader screen appears.
+    // It is not passed into the shader.
+    const camera = new THREE.PerspectiveCamera(
+      70,
+      window.innerWidth / window.innerHeight,
+      0.01,
+      100
+    );
+    camera.position.set(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(VRButton.createButton(renderer));
+
+    const uniforms = {
+      iResolution: {
+        value: new THREE.Vector3(SHADER_WIDTH, SHADER_HEIGHT, 1)
+      },
+      iTime: {
+        value: 0
+      }
+    };
+
+    const material = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader,
+      fragmentShader,
+      side: THREE.DoubleSide
+    });
+
+    // 16:9 floating screen, two meters in front of the viewer.
+    const screenWidth = 3.2;
+    const screenHeight = screenWidth * (SHADER_HEIGHT / SHADER_WIDTH);
+
+    const screen = new THREE.Mesh(
+      new THREE.PlaneGeometry(screenWidth, screenHeight, 1, 1),
+      material
+    );
+
+    screen.position.set(0, 1.5, -2.5);
+    scene.add(screen);
+
+    // On desktop, put the camera at approximate standing-eye height and aim it
+    // directly at the center of the floating screen.
+    camera.position.y = 1.5;
+    camera.lookAt(screen.position);
+
+    const clock = new THREE.Clock();
+
+    renderer.setAnimationLoop(() => {
+      uniforms.iTime.value = clock.getElapsedTime();
+      renderer.render(scene, camera);
+    });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
