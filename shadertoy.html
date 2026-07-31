@@ -6,12 +6,14 @@
     name="viewport"
     content="width=device-width, initial-scale=1, viewport-fit=cover"
   />
-  <title>VR Shadertoy Starter</title>
+  <title>VR Shadertoy Sphere</title>
 
   <!--
     ================================================================
     EDIT THIS SHADER.
-    It uses the same mainImage / iTime / iResolution shape as Shadertoy.
+    It uses Shadertoy-style mainImage / iTime / iResolution.
+    The shader is simply wrapped onto the inside of a sphere.
+    No raycasting or raymarching is used.
     ================================================================
   -->
   <script id="shadertoy-code" type="x-shader/x-fragment">
@@ -64,13 +66,19 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: #050505;
+      background: #000;
     }
 
     canvas {
       display: block;
       width: 100%;
       height: 100%;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
     }
 
     #info {
@@ -78,7 +86,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
       left: 16px;
       top: 16px;
       z-index: 10;
-      max-width: min(520px, calc(100vw - 32px));
+      max-width: min(540px, calc(100vw - 32px));
       padding: 10px 12px;
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 10px;
@@ -107,17 +115,15 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 
 <body>
   <div id="info">
-    <strong>VR Shadertoy Starter</strong>
-    Edit the shader at the top of this file, save, and refresh.
-    Use “Enter VR” in Quest Browser.
+    <strong>VR Shadertoy Sphere</strong>
+    Your 2D shader is wrapped around the inside of a sphere.
+    Drag on desktop to look around, or use Enter VR in Quest Browser.
   </div>
 
   <script type="module">
     import * as THREE from "three";
     import { VRButton } from "three/addons/webxr/VRButton.js";
 
-    // Shadertoy's virtual output size. The effect remains a plain 2D image
-    // and does not depend on the desktop or headset camera.
     const SHADER_WIDTH = 1280;
     const SHADER_HEIGHT = 720;
 
@@ -135,8 +141,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
       }
     `;
 
-    // This wrapper supplies Shadertoy-style uniforms and converts the plane's
-    // 0..1 UV coordinates into Shadertoy-like fragment coordinates.
     const fragmentShader = `
       precision highp float;
 
@@ -158,17 +162,16 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     `;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050505);
 
-    // The camera only determines where the rectangular shader screen appears.
-    // It is not passed into the shader.
     const camera = new THREE.PerspectiveCamera(
-      70,
+      75,
       window.innerWidth / window.innerHeight,
       0.01,
-      100
+      200
     );
-    camera.position.set(0, 0, 0);
+
+    // Approximate standing eye height for desktop preview.
+    camera.position.set(0, 1.6, 0);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -195,25 +198,66 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
       uniforms,
       vertexShader,
       fragmentShader,
-      side: THREE.DoubleSide
+
+      // Render the sphere's inner surface.
+      side: THREE.BackSide
     });
 
-    // 16:9 floating screen, two meters in front of the viewer.
-    const screenWidth = 3.2;
-    const screenHeight = screenWidth * (SHADER_HEIGHT / SHADER_WIDTH);
-
-    const screen = new THREE.Mesh(
-      new THREE.PlaneGeometry(screenWidth, screenHeight, 1, 1),
+    // Large enough that small physical headset movement still keeps you
+    // comfortably inside the sphere.
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(30, 96, 64),
       material
     );
 
-    screen.position.set(0, 1.5, -2.5);
-    scene.add(screen);
+    // Center the sphere around standing eye height.
+    sphere.position.set(0, 1.6, 0);
+    scene.add(sphere);
 
-    // On desktop, put the camera at approximate standing-eye height and aim it
-    // directly at the center of the floating screen.
-    camera.position.y = 1.5;
-    camera.lookAt(screen.position);
+    // Desktop mouse/touch look. This only rotates the Three.js camera.
+    // The rotation is not passed into the shader.
+    let yaw = 0;
+    let pitch = 0;
+    let dragging = false;
+    let previousX = 0;
+    let previousY = 0;
+
+    renderer.domElement.addEventListener("pointerdown", (event) => {
+      dragging = true;
+      previousX = event.clientX;
+      previousY = event.clientY;
+      renderer.domElement.setPointerCapture(event.pointerId);
+    });
+
+    renderer.domElement.addEventListener("pointermove", (event) => {
+      if (!dragging || renderer.xr.isPresenting) return;
+
+      const dx = event.clientX - previousX;
+      const dy = event.clientY - previousY;
+
+      previousX = event.clientX;
+      previousY = event.clientY;
+
+      yaw -= dx * 0.004;
+      pitch -= dy * 0.004;
+      pitch = Math.max(
+        -Math.PI / 2 + 0.01,
+        Math.min(Math.PI / 2 - 0.01, pitch)
+      );
+
+      camera.rotation.order = "YXZ";
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    });
+
+    renderer.domElement.addEventListener("pointerup", (event) => {
+      dragging = false;
+      renderer.domElement.releasePointerCapture(event.pointerId);
+    });
+
+    renderer.domElement.addEventListener("pointercancel", () => {
+      dragging = false;
+    });
 
     const clock = new THREE.Clock();
 
@@ -225,7 +269,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
   </script>
