@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Random Dance Caller</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #101114;
+      color: #f5f5f5;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    main {
+      width: min(860px, 94vw);
+      text-align: center;
+      padding: 2rem 1rem 3rem;
+    }
+    h1 { font-size: clamp(1.4rem, 4vw, 2rem); opacity: .75; margin: 0 0 1.25rem; }
+    #move {
+      min-height: 2.5em;
+      display: grid;
+      place-items: center;
+      font-size: clamp(2.8rem, 10vw, 6.5rem);
+      line-height: .98;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin: 1.4rem 0 2rem;
+      overflow-wrap: anywhere;
+    }
+    .dance-picker {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .6rem;
+      margin-bottom: .5rem;
+    }
+    button, input, select {
+      font: inherit;
+      border-radius: .8rem;
+      border: 1px solid #444;
+      padding: .8rem 1rem;
+      background: #202228;
+      color: inherit;
+    }
+    select { min-width: 180px; font-weight: 700; }
+    button { cursor: pointer; font-weight: 700; }
+    button:hover { background: #2b2e36; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .75rem;
+    }
+    .interval {
+      margin-top: 1rem;
+      opacity: .8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+    #seconds { width: 5rem; text-align: center; }
+    #status { margin-top: 1rem; opacity: .55; min-height: 1.4em; }
+    .spotify { margin: 1.5rem auto 0; max-width: 720px; }
+    .spotify iframe { display: block; width: 100%; border: 0; border-radius: 12px; }
+
+    .pool {
+      margin: 2.1rem auto 0;
+      max-width: 720px;
+      text-align: left;
+      border-top: 1px solid #33363d;
+      padding-top: 1.35rem;
+    }
+    .pool-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: baseline;
+      flex-wrap: wrap;
+      margin-bottom: .85rem;
+    }
+    .pool h2 { margin: 0; font-size: 1.05rem; }
+    #activeCount { opacity: .55; font-size: .9rem; }
+    #moveList {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .55rem;
+    }
+    .move-row {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      min-width: 0;
+      border: 1px solid #33363d;
+      background: #17191e;
+      border-radius: .75rem;
+      padding: .55rem .55rem .55rem .75rem;
+    }
+    .move-row label {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      cursor: pointer;
+    }
+    .move-row input[type="checkbox"] {
+      width: 1.1rem;
+      height: 1.1rem;
+      padding: 0;
+      flex: 0 0 auto;
+      accent-color: currentColor;
+    }
+    .move-name {
+      overflow-wrap: anywhere;
+    }
+    .remove {
+      padding: .35rem .6rem;
+      min-width: 2rem;
+      border-radius: .55rem;
+      color: #d6d6d6;
+      background: transparent;
+    }
+    .add-row {
+      display: flex;
+      gap: .6rem;
+      margin-top: .85rem;
+    }
+    #newMove { flex: 1; width: auto; text-align: left; }
+    .pool-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: .5rem;
+      margin-top: .7rem;
+    }
+    .quiet {
+      padding: .55rem .8rem;
+      font-size: .86rem;
+      font-weight: 600;
+      opacity: .75;
+    }
+    #editMessage { min-height: 1.2em; margin-top: .55rem; font-size: .85rem; opacity: .6; }
+
+    @media (max-width: 640px) {
+      main { padding-top: 1.25rem; }
+      #moveList { grid-template-columns: 1fr; }
+      .add-row { flex-direction: column; }
+      .add-row button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Random Dance Caller</h1>
+
+    <div class="dance-picker">
+      <label for="dance">Dance</label>
+      <select id="dance" aria-label="Dance type"></select>
+    </div>
+
+    <div id="move">Press Start</div>
+
+    <div class="controls">
+      <button id="start">Start</button>
+      <button id="stop">Stop</button>
+      <button id="next">Call one now</button>
+    </div>
+
+    <div class="interval">
+      <label for="seconds">Call every</label>
+      <input id="seconds" type="number" min="3" max="3600" step="1" value="30" />
+      <span>seconds</span>
+    </div>
+
+    <div id="status">Stopped</div>
+
+    <section class="spotify" aria-label="Spotify playlist">
+      <iframe id="spotifyFrame" data-testid="embed-iframe" title="Spotify playlist" src="https://open.spotify.com/embed/playlist/0RHeu8jwgs5CXz17m6RyZI?utm_source=generator&si=ff0d003d90514b3c" width="100%" height="352" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+    </section>
+
+    <section class="pool" aria-labelledby="poolTitle">
+      <div class="pool-head">
+        <h2 id="poolTitle">Move pool</h2>
+        <span id="activeCount"></span>
+      </div>
+
+      <div id="moveList"></div>
+
+      <form id="addForm" class="add-row">
+        <input id="newMove" type="text" maxlength="80" autocomplete="off" placeholder="Add a move to this dance…" aria-label="New move name" />
+        <button type="submit">Add move</button>
+      </form>
+
+      <div class="pool-actions">
+        <button id="allOn" class="quiet" type="button">Select all</button>
+        <button id="allOff" class="quiet" type="button">Select none</button>
+        <button id="resetDance" class="quiet" type="button">Reset this dance</button>
+      </div>
+      <div id="editMessage" aria-live="polite"></div>
+    </section>
+  </main>
+
+<script>
+const DEFAULT_DANCES = {
+  "Rumba": [
+    "Box Basic",
+    "Cuban Motion",
+    "Underarm Turn",
+    "Forward Back Rocks",
+    "Fifth Position Break",
+    "Open Box",
+    "Closed Rocks",
+    "Open Cuban Walk"
+  ],
+  "Cha-Cha": [
+    "Basic + Chassé",
+    "Cross Body Lead",
+    "Crossover Break / New Yorker",
+    "Two Way Underarm Turn",
+    "Fifth Position Break",
+    "Cha-Cha Chase"
+  ],
+  "Tango": [
+    "Promenade",
+    "Basic",
+    "Rock and Corte",
+    "Open Fan"
+  ],
+  "Waltz": [
+    "Box Basic",
+    "Underarm Turn",
+    "Progressive Step",
+    "Simple Twinkle",
+    "Open Break to 5th Position",
+    "Back to Back"
+  ]
+};
+
+const SPOTIFY_PLAYLISTS = {
+  "Waltz": "https://open.spotify.com/embed/playlist/0RHeu8jwgs5CXz17m6RyZI?utm_source=generator&si=ff0d003d90514b3c",
+  "Rumba": "https://open.spotify.com/embed/playlist/2DArs4WxU06LmXlBwvmHoZ?utm_source=generator&si=6b27f9d4801f42b4",
+  "Tango": "https://open.spotify.com/embed/playlist/6wIyc7L09ZhCXZeo7es5QF?utm_source=generator&si=14384760f8314942",
+  "Cha-Cha": "https://open.spotify.com/embed/playlist/2UJIaudNwXIiFa5F8jyXca?utm_source=generator&si=4090434b97bd48c8"
+};
+
+const STORAGE_KEY = 'randomDanceCallerMulti.v2';
+
+function makeDefaultState() {
+  const dances = {};
+  for (const [dance, moves] of Object.entries(DEFAULT_DANCES)) {
+    dances[dance] = moves.map(name => ({ name, active: true }));
+  }
+  return { selectedDance: 'Waltz', dances };
+}
+
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!saved || !saved.dances) return makeDefaultState();
+
+    const fresh = makeDefaultState();
+    for (const dance of Object.keys(fresh.dances)) {
+      if (Array.isArray(saved.dances[dance])) fresh.dances[dance] = saved.dances[dance];
+    }
+    if (fresh.dances[saved.selectedDance]) fresh.selectedDance = saved.selectedDance;
+    return fresh;
+  } catch {
+    return makeDefaultState();
+  }
+}
+
+let state = loadState();
+let timer = null;
+let lastMoveName = null;
+
+const moveEl = document.getElementById('move');
+const statusEl = document.getElementById('status');
+const secondsEl = document.getElementById('seconds');
+const danceEl = document.getElementById('dance');
+const moveListEl = document.getElementById('moveList');
+const activeCountEl = document.getElementById('activeCount');
+const newMoveEl = document.getElementById('newMove');
+const editMessageEl = document.getElementById('editMessage');
+const startBtn = document.getElementById('start');
+const nextBtn = document.getElementById('next');
+const spotifyFrame = document.getElementById('spotifyFrame');
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
+
+function currentMoves() {
+  return state.dances[state.selectedDance] || [];
+}
+
+function activeMoves() {
+  return currentMoves().filter(move => move.active);
+}
+
+function updateAvailability() {
+  const count = activeMoves().length;
+  activeCountEl.textContent = `${count} of ${currentMoves().length} active`;
+  startBtn.disabled = count === 0;
+  nextBtn.disabled = count === 0;
+  if (count === 0 && timer) stop('Stopped — select at least one move');
+}
+
+function renderDanceOptions() {
+  danceEl.innerHTML = '';
+  for (const dance of Object.keys(DEFAULT_DANCES)) {
+    const option = document.createElement('option');
+    option.value = dance;
+    option.textContent = dance;
+    danceEl.appendChild(option);
+  }
+  danceEl.value = state.selectedDance;
+}
+
+function renderMoveList() {
+  moveListEl.innerHTML = '';
+  const moves = currentMoves();
+
+  moves.forEach((move, index) => {
+    const row = document.createElement('div');
+    row.className = 'move-row';
+
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = move.active;
+    checkbox.setAttribute('aria-label', `Include ${move.name}`);
+    checkbox.addEventListener('change', () => {
+      move.active = checkbox.checked;
+      saveState();
+      updateAvailability();
+    });
+
+    const name = document.createElement('span');
+    name.className = 'move-name';
+    name.textContent = move.name;
+
+    label.append(checkbox, name);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove';
+    remove.textContent = '×';
+    remove.title = `Remove ${move.name}`;
+    remove.setAttribute('aria-label', `Remove ${move.name}`);
+    remove.addEventListener('click', () => {
+      const removed = move.name;
+      state.dances[state.selectedDance].splice(index, 1);
+      if (lastMoveName === removed) lastMoveName = null;
+      saveState();
+      renderMoveList();
+      editMessageEl.textContent = `Removed “${removed}” from ${state.selectedDance}.`;
+    });
+
+    row.append(label, remove);
+    moveListEl.appendChild(row);
+  });
+
+  if (moves.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.opacity = '.55';
+    empty.style.padding = '.8rem 0';
+    empty.textContent = 'No moves in this dance yet. Add one below.';
+    moveListEl.appendChild(empty);
+  }
+
+  updateAvailability();
+}
+
+function randomMove() {
+  const moves = activeMoves();
+  if (moves.length === 0) return null;
+  if (moves.length === 1) {
+    lastMoveName = moves[0].name;
+    return moves[0].name;
+  }
+
+  let chosen;
+  do {
+    chosen = moves[Math.floor(Math.random() * moves.length)].name;
+  } while (chosen === lastMoveName);
+
+  lastMoveName = chosen;
+  return chosen;
+}
+
+function chooseBritishVoice(voices) {
+  const preferredNames = [
+    'Google UK English Female',
+    'Microsoft Sonia Online (Natural) - English (United Kingdom)',
+    'Microsoft Sonia - English (United Kingdom)',
+    'Sonia',
+    'Serena',
+    'Kate',
+    'Libby'
+  ];
+
+  return preferredNames.map(name => voices.find(v => v.name === name)).find(Boolean) ||
+    voices.find(v => v.lang === 'en-GB' && /female|sonia|serena|kate|libby/i.test(v.name)) ||
+    voices.find(v => v.lang === 'en-GB') ||
+    null;
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.voice = chooseBritishVoice(speechSynthesis.getVoices());
+  utterance.lang = 'en-GB';
+  utterance.rate = 0.95;
+  utterance.volume = 1;
+  utterance.pitch = 0.92;
+  speechSynthesis.speak(utterance);
+}
+
+function callMove() {
+  const move = randomMove();
+  if (!move) {
+    statusEl.textContent = 'Select at least one move';
+    return;
+  }
+  moveEl.textContent = move;
+  speak(move);
+}
+
+function getIntervalSeconds() {
+  let seconds = Number(secondsEl.value);
+  if (!Number.isFinite(seconds)) seconds = 30;
+  seconds = Math.min(3600, Math.max(3, Math.round(seconds)));
+  secondsEl.value = seconds;
+  return seconds;
+}
+
+function start() {
+  stop();
+  if (activeMoves().length === 0) {
+    statusEl.textContent = 'Select at least one move';
+    return;
+  }
+  const seconds = getIntervalSeconds();
+  callMove();
+  timer = setInterval(callMove, seconds * 1000);
+  statusEl.textContent = `Running ${state.selectedDance} — random call every ${seconds} seconds`;
+}
+
+function stop(message = 'Stopped') {
+  if (timer) clearInterval(timer);
+  timer = null;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  statusEl.textContent = message;
+}
+
+function updateSpotify() {
+  const src = SPOTIFY_PLAYLISTS[state.selectedDance];
+  if (src && spotifyFrame.src !== src) spotifyFrame.src = src;
+}
+
+function switchDance(dance) {
+  const wasRunning = Boolean(timer);
+  if (timer) clearInterval(timer);
+  timer = null;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+
+  state.selectedDance = dance;
+  updateSpotify();
+  lastMoveName = null;
+  saveState();
+  renderMoveList();
+  moveEl.textContent = 'Press Start';
+  editMessageEl.textContent = '';
+
+  if (wasRunning && activeMoves().length > 0) start();
+  else statusEl.textContent = 'Stopped';
+}
+
+renderDanceOptions();
+renderMoveList();
+updateSpotify();
+
+if ('speechSynthesis' in window) {
+  speechSynthesis.getVoices();
+  speechSynthesis.addEventListener?.('voiceschanged', () => speechSynthesis.getVoices());
+}
+
+document.getElementById('start').addEventListener('click', start);
+document.getElementById('stop').addEventListener('click', () => stop());
+document.getElementById('next').addEventListener('click', callMove);
+secondsEl.addEventListener('change', () => { if (timer) start(); else getIntervalSeconds(); });
+danceEl.addEventListener('change', () => switchDance(danceEl.value));
+
+document.getElementById('addForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const name = newMoveEl.value.trim().replace(/\s+/g, ' ');
+  if (!name) return;
+
+  const duplicate = currentMoves().some(move => move.name.toLowerCase() === name.toLowerCase());
+  if (duplicate) {
+    editMessageEl.textContent = `“${name}” is already in ${state.selectedDance}.`;
+    return;
+  }
+
+  currentMoves().push({ name, active: true });
+  newMoveEl.value = '';
+  saveState();
+  renderMoveList();
+  editMessageEl.textContent = `Added “${name}” to ${state.selectedDance}.`;
+  newMoveEl.focus();
+});
+
+document.getElementById('allOn').addEventListener('click', () => {
+  currentMoves().forEach(move => move.active = true);
+  saveState();
+  renderMoveList();
+  editMessageEl.textContent = `All ${state.selectedDance} moves selected.`;
+});
+
+document.getElementById('allOff').addEventListener('click', () => {
+  currentMoves().forEach(move => move.active = false);
+  saveState();
+  renderMoveList();
+  editMessageEl.textContent = `All ${state.selectedDance} moves deselected.`;
+});
+
+document.getElementById('resetDance').addEventListener('click', () => {
+  state.dances[state.selectedDance] = DEFAULT_DANCES[state.selectedDance].map(name => ({ name, active: true }));
+  lastMoveName = null;
+  saveState();
+  renderMoveList();
+  editMessageEl.textContent = `${state.selectedDance} restored to its default move list.`;
+});
+</script>
+</body>
+</html>
